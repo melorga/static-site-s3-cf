@@ -2,9 +2,7 @@
 *.tfstate
 *.tfstate.*
 *.tfvars
-*.tfvars.json
 *.tfplan
-plan.bin
 .terraform/
 .terraform.lock.hcl
 crash.log
@@ -13,16 +11,8 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
-# Build outputs
-dist/
-build/
-public/
-
-# Node.js (if using build tools)
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Terragrunt
+.terragrunt-cache/
 
 # IDE
 .vscode/
@@ -38,12 +28,18 @@ Thumbs.db
 # Logs
 *.log
 
-# Environment variables
+# Runtime
+node_modules/
+venv/
+__pycache__/
+*.pyc
 .env
 .env.local
-.env.production
 
-# SSL certificates
-*.crt
-*.pem
-*.key
+# Archives
+*.zip
+*.tar.gz
+
+# Test outputs
+test-results/
+coverage/
