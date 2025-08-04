@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Static Site Demo - AWS S3 + CloudFront</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌐 Static Site Infrastructure Demo</h1>
+            <p class="subtitle">Powered by AWS S3 + CloudFront + Terraform</p>
+        </header>
+        
+        <main>
+            <section class="hero">
+                <h2>Welcome to Your Static Site!</h2>
+                <p>This website is hosted on AWS using a modern, scalable infrastructure:</p>
+                
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <h3>🚀 High Performance</h3>
+                        <p>Global content delivery via CloudFront CDN</p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <h3>🔒 Secure</h3>
+                        <p>SSL/TLS encryption and secure S3 configurations</p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <h3>💰 Cost-Effective</h3>
+                        <p>Pay only for what you use with S3 storage pricing</p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <h3>⚡ Scalable</h3>
+                        <p>Automatically scales to handle traffic spikes</p>
+                    </div>
+                </div>
+            </section>
+            
+            <section class="architecture">
+                <h2>Architecture Components</h2>
+                <ul>
+                    <li><strong>Amazon S3:</strong> Static website hosting with versioning</li>
+                    <li><strong>CloudFront:</strong> Global CDN with caching and compression</li>
+                    <li><strong>Route 53:</strong> DNS management (optional)</li>
+                    <li><strong>ACM:</strong> Automated SSL certificate management</li>
+                    <li><strong>Terraform:</strong> Infrastructure as Code</li>
+                </ul>
+            </section>
+            
+            <section class="metrics">
+                <h2>Performance Metrics</h2>
+                <div class="metrics-grid">
+                    <div class="metric">
+                        <span class="metric-value">< 100ms</span>
+                        <span class="metric-label">Global Latency</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-value">99.99%</span>
+                        <span class="metric-label">Availability SLA</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-value">$0.50</span>
+                        <span class="metric-label">Monthly Cost*</span>
+                    </div>
+                </div>
+                <p class="metric-footnote">*Estimated cost for 10K page views/month</p>
+            </section>
+        </main>
+        
+        <footer>
+            <p>&copy; 2024 AWS Solutions Architect Portfolio. Built with ❤️ and Terraform.</p>
+            <p>
+                <a href="https://github.com/melorga/static-site-s3-cf" target="_blank">
+                    View Source Code on GitHub
+                </a>
+            </p>
+        </footer>
+    </div>
+</body>
+</html>
