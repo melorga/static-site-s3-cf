@@ -51,11 +51,17 @@ variable "enable_versioning" {
   default     = true
 }
 
+variable "enable_logging" {
+  description = "Provision an access-logs bucket and enable S3 server access logging on the website bucket"
+  type        = bool
+  default     = false
+}
+
 variable "price_class" {
   description = "CloudFront distribution price class"
   type        = string
   default     = "PriceClass_100"
-  
+
   validation {
     condition     = contains(["PriceClass_All", "PriceClass_200", "PriceClass_100"], var.price_class)
     error_message = "Price class must be PriceClass_All, PriceClass_200, or PriceClass_100."
@@ -66,29 +72,11 @@ variable "viewer_protocol_policy" {
   description = "Viewer protocol policy"
   type        = string
   default     = "redirect-to-https"
-  
+
   validation {
     condition     = contains(["allow-all", "https-only", "redirect-to-https"], var.viewer_protocol_policy)
     error_message = "Viewer protocol policy must be allow-all, https-only, or redirect-to-https."
   }
-}
-
-variable "min_ttl" {
-  description = "Minimum TTL for CloudFront caching"
-  type        = number
-  default     = 0
-}
-
-variable "default_ttl" {
-  description = "Default TTL for CloudFront caching"
-  type        = number
-  default     = 3600
-}
-
-variable "max_ttl" {
-  description = "Maximum TTL for CloudFront caching"
-  type        = number
-  default     = 86400
 }
 
 variable "custom_error_responses" {
@@ -111,7 +99,7 @@ variable "geo_restriction_type" {
   description = "Geographic restriction type"
   type        = string
   default     = "none"
-  
+
   validation {
     condition     = contains(["none", "whitelist", "blacklist"], var.geo_restriction_type)
     error_message = "Geo restriction type must be none, whitelist, or blacklist."
