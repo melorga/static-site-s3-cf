@@ -1,448 +1,133 @@
-# 🌐 Static Site Infrastructure - S3 + CloudFront
+# Static Site Infrastructure - S3 + CloudFront
 
 [![AWS](https://img.shields.io/badge/AWS-S3%20%7C%20CloudFront%20%7C%20Route53-FF9900?style=for-the-badge&logo=amazon-aws)](https://aws.amazon.com/)
 [![Terraform](https://img.shields.io/badge/Terraform-Infrastructure-7B42BC?style=for-the-badge&logo=terraform)](https://terraform.io/)
 [![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-CI%2FCD-2088FF?style=for-the-badge&logo=github-actions)](https://github.com/features/actions)
 
-Production-ready static website hosting infrastructure using AWS S3, CloudFront, and Route 53. Includes automated SSL certificate management, global CDN distribution, and CI/CD pipeline for seamless deployments.
+Production-ready static-website hosting on AWS S3 + CloudFront + Route53, packaged as a Terraform module. ACM, OAC, response-headers policy, and an opt-in access-logs bucket are wired in for you.
 
-## 🏗️ Architecture Overview
+## Architecture
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│     Route 53    │    │   CloudFront    │    │       S3        │
-│   (DNS + SSL)   │───▶│   (Global CDN)  │───▶│  (Static Files) │
-│                 │    │                 │    │  Origin Access  │
-└─────────────────┘    └─────────────────┘    │    Control      │
-         │                        │           └─────────────────┘
-         ▼                        ▼                      │
-┌─────────────────┐    ┌─────────────────┐              ▼
-│  ACM Certificate│    │   CloudWatch    │    ┌─────────────────┐
-│  (SSL/TLS)      │    │   (Monitoring)  │    │ GitHub Actions  │
-│                 │    │                 │    │   (CI/CD)       │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+Route 53 (DNS, alias)  --->  CloudFront (OAC, cache + response headers)  --->  S3 (private, BucketOwnerEnforced)
+                                                       |
+                                                       v
+                                              ACM cert (us-east-1)
 ```
 
-## ✨ Features
+## Features
 
-### 🚀 **Global Performance**
-- **CloudFront CDN**: Lightning-fast global content delivery
-- **Edge Locations**: 400+ edge locations worldwide for < 50ms latency
-- **Caching**: Intelligent content caching with customizable TTL
-- **Compression**: Automatic Gzip/Brotli compression
+- Private S3 origin with `BucketOwnerEnforced`, public-access-block, SSE-S3, optional versioning.
+- CloudFront distribution with managed `CachingOptimized` and `CORS-S3Origin` policies; methods restricted to `GET/HEAD/OPTIONS`.
+- `aws_cloudfront_response_headers_policy` providing HSTS (with `preload`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and a baseline CSP of `default-src 'self'`.
+- ACM certificate provisioned in `us-east-1` via a `aws.us_east_1` aliased provider (CloudFront requirement).
+- Optional access-logs bucket (`enable_logging = true`) with the same hardening posture.
+- IPv4 + IPv6 alias records on Route 53 when a custom domain is supplied.
 
-### 🛡️ **Security & SSL**
-- **HTTPS Enforced**: Automatic HTTP to HTTPS redirects
-- **SSL/TLS**: Free SSL certificates via AWS Certificate Manager
-- **Security Headers**: HSTS, CSP, X-Frame-Options, and more
-- **Origin Access Control**: Private S3 bucket with CDN-only access
+## Requirements
 
-### 💰 **Cost Optimized**
-- **S3 Intelligent Tiering**: Automatic cost optimization
-- **CloudFront Pricing**: PriceClass_100 for cost-effective global reach
-- **No Server Costs**: Fully serverless architecture
-- **Pay-per-use**: Only pay for actual traffic and storage
+- Terraform `>= 1.9, < 2.0`
+- AWS provider `~> 6.0`
+- AWS account with permissions to manage S3, CloudFront, ACM, and (optionally) Route53
 
-### 🔄 **DevOps Ready**
-- **Infrastructure as Code**: Complete Terraform modules
-- **CI/CD Pipeline**: Automated deployments with GitHub Actions
-- **Multi-environment**: Support for dev, staging, and production
-- **Monitoring**: CloudWatch metrics and alarms
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- AWS CLI configured with appropriate permissions
-- Terraform >= 1.8
-- Domain name registered (optional)
-
-### Basic Deployment
+## Quick start
 
 ```bash
-# Clone the repository
-git clone https://github.com/melorga-portfolio/static-site-s3-cf.git
-cd static-site-s3-cf
+git clone https://github.com/melorga/static-site-s3-cf.git
+cd static-site-s3-cf/examples/basic
 
-# Create terraform.tfvars
-cat > terraform.tfvars << EOF
-bucket_name = "my-awesome-website"
-domain_name = "example.com"
-subdomain   = "www"
-EOF
-
-# Deploy infrastructure
 terraform init
 terraform plan
 terraform apply
-
-# Upload your website files
-aws s3 sync ./website/ s3://my-awesome-website/ --delete
 ```
 
-### Custom Domain Setup
+`examples/basic/main.tf` declares both a default `aws` provider and a `aws.us_east_1` aliased provider, then passes the providers map into the module - copy that pattern into your own root module.
 
-1. **Create ACM Certificate** (us-east-1 region):
-```bash
-aws acm request-certificate \
-  --domain-name "*.example.com" \
-  --validation-method DNS \
-  --region us-east-1
-```
+## Module usage
 
-2. **Update Terraform Configuration**:
 ```hcl
+provider "aws" {
+  region = "eu-west-1"
+}
+
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
 module "static_site" {
-  source = "./terraform"
+  source = "github.com/melorga/static-site-s3-cf//modules/s3-cloudfront"
 
-  bucket_name        = "my-awesome-website"
-  domain_name        = "example.com"
-  subdomain          = "www"
-  certificate_arn    = "arn:aws:acm:us-east-1:123456789012:certificate/abcd1234"
-  
+  providers = {
+    aws            = aws
+    aws.us_east_1  = aws.us_east_1
+  }
+
+  site_name      = "my-marketing-site"
+  environment    = "prod"
+  custom_domain  = "www.example.com"
+  hosted_zone_id = "Z123456ABCDEFG"
+  enable_logging = true
+
   tags = {
-    Project = "MyWebsite"
-    Owner   = "TeamName"
+    Project = "marketing"
+    Owner   = "platform"
   }
 }
 ```
 
-## 📊 **Performance Metrics**
+## Inputs
 
-| Metric | Target | Typical Results |
-|--------|--------|-----------------|
-| Global Latency | < 100ms | 45ms avg |
-| Time to First Byte | < 200ms | 85ms avg |
-| Availability | 99.99% | 99.95% actual |
-| Cache Hit Ratio | > 90% | 94% avg |
-| SSL Score | A+ | A+ (SSL Labs) |
+| Variable | Description | Type | Default |
+|----------|-------------|------|---------|
+| `site_name` | Name of the website/project; used for tags, OAC, response-headers policy | `string` | _required_ |
+| `environment` | Environment tag (`prod`, `stage`, `dev`, ...) | `string` | `"prod"` |
+| `bucket_name` | Override the generated S3 bucket name | `string` | `null` |
+| `custom_domain` | Apex/sub domain to serve from (also requires `hosted_zone_id`) | `string` | `null` |
+| `hosted_zone_id` | Route53 hosted zone ID for `custom_domain` | `string` | `null` |
+| `subject_alternative_names` | Additional SANs for the ACM cert | `list(string)` | `[]` |
+| `index_document` | S3 index document | `string` | `"index.html"` |
+| `error_document` | S3 error document | `string` | `"error.html"` |
+| `enable_versioning` | Enable S3 versioning on the website bucket | `bool` | `true` |
+| `enable_logging` | Provision a logs bucket and enable S3 server access logging | `bool` | `false` |
+| `price_class` | CloudFront price class | `string` | `"PriceClass_100"` |
+| `viewer_protocol_policy` | CloudFront viewer protocol policy | `string` | `"redirect-to-https"` |
+| `custom_error_responses` | List of CloudFront custom error responses | `list(object)` | 404 -> `/error.html` |
+| `geo_restriction_type` | `none`, `whitelist`, or `blacklist` | `string` | `"none"` |
+| `geo_restriction_locations` | Country codes for geo restriction | `list(string)` | `[]` |
+| `tags` | Additional tags merged into every resource | `map(string)` | `{}` |
 
-## 💰 **Cost Analysis**
+## Outputs
 
-**Monthly Costs** (based on 100K page views):
+`bucket_name`, `bucket_domain_name`, `bucket_regional_domain_name`, `cloudfront_distribution_id`, `cloudfront_domain_name`, `cloudfront_hosted_zone_id`, `certificate_arn`, `website_url`, `s3_website_endpoint`.
 
-- **S3 Storage**: ~$0.25 (1GB)
-- **S3 Requests**: ~$0.05 (GET requests)
-- **CloudFront**: ~$1.50 (data transfer)
-- **Route 53**: ~$0.50 (hosted zone)
-- **ACM Certificate**: FREE
-- **Total**: **~$2.30/month**
+## CI/CD
 
-*Scales efficiently with traffic - 1M page views ~$8-12/month*
+`.github/workflows/deploy.yml` covers fmt + validate, Trivy IaC scan, plan on PRs, and apply + S3 sync + CloudFront invalidation on `main`. Authentication is via OIDC - set the `AWS_OIDC_ROLE_ARN` repo secret to the IAM role you trust to GitHub Actions.
 
-## 🏗️ **Terraform Module Usage**
+## Performance
 
-### Basic Website
+Lighthouse runs on every deployment via `treosh/lighthouse-ci-action`. Reports are uploaded as workflow artifacts - check the latest run for current scores instead of relying on numbers in this README.
 
-```hcl
-module "static_site" {
-  source = "git::https://github.com/melorga-portfolio/static-site-s3-cf.git//terraform"
-  
-  bucket_name = "my-simple-website"
-  
-  tags = {
-    Project = "Personal Website"
-  }
-}
-```
+## Cost
 
-### Production Website with Custom Domain
+Rough order of magnitude for a low-traffic marketing site (~100k page views / month):
 
-```hcl
-module "production_site" {
-  source = "git::https://github.com/melorga-portfolio/static-site-s3-cf.git//terraform"
-  
-  bucket_name        = "production-website"
-  domain_name        = "mycompany.com"
-  subdomain          = "www"
-  certificate_arn    = data.aws_acm_certificate.main.arn
-  
-  # Enable additional security features
-  enable_waf         = true
-  enable_logging     = true
-  
-  # Custom cache behaviors
-  cache_behaviors = [
-    {
-      path_pattern     = "/api/*"
-      target_origin_id = "api-origin"
-      ttl_min         = 0
-      ttl_default     = 0
-      ttl_max         = 0
-    }
-  ]
-  
-  tags = {
-    Environment = "production"
-    Project     = "Corporate Website"
-    Owner       = "DevOps Team"
-  }
-}
+- S3 storage + requests: a few cents
+- CloudFront data transfer: low single-digit USD
+- Route 53 hosted zone: ~$0.50
+- ACM: free
 
-# SSL Certificate
-data "aws_acm_certificate" "main" {
-  domain   = "*.mycompany.com"
-  statuses = ["ISSUED"]
-}
-```
+Actual costs depend entirely on traffic; treat this as a sanity check, not a quote.
 
-### Multi-Environment Setup
+## Security model
 
-```hcl
-# Development
-module "dev_site" {
-  source = "./terraform"
-  
-  bucket_name     = "dev-mywebsite"
-  subdomain       = "dev"
-  domain_name     = "mywebsite.com"
-  price_class     = "PriceClass_100"
-  
-  tags = {
-    Environment = "development"
-  }
-}
+- S3 bucket is private. CloudFront reads via OAC; the bucket policy allows only the `cloudfront.amazonaws.com` service principal scoped to the distribution ARN.
+- All four `aws_s3_bucket_public_access_block` flags are `true` on both the website and (when enabled) logs buckets.
+- `BucketOwnerEnforced` ownership controls disable ACLs entirely.
+- HTTPS is enforced via `viewer_protocol_policy = "redirect-to-https"` and TLS 1.2_2021 minimum when a custom domain is in use.
+- HSTS / X-Frame-Options / nosniff / Referrer-Policy / CSP are added by the response-headers policy.
 
-# Production
-module "prod_site" {
-  source = "./terraform"
-  
-  bucket_name     = "prod-mywebsite"
-  subdomain       = "www"
-  domain_name     = "mywebsite.com"
-  price_class     = "PriceClass_All"
-  
-  tags = {
-    Environment = "production"
-  }
-}
-```
+## License
 
-## 🔧 **Configuration Options**
-
-### Required Variables
-
-| Variable | Description | Type |
-|----------|-------------|------|
-| `bucket_name` | S3 bucket name (must be globally unique) | `string` |
-
-### Optional Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `domain_name` | Custom domain name | `null` |
-| `subdomain` | Subdomain (www, blog, etc.) | `null` |
-| `certificate_arn` | ACM certificate ARN | `null` |
-| `price_class` | CloudFront price class | `PriceClass_100` |
-| `enable_waf` | Enable AWS WAF | `false` |
-| `enable_logging` | Enable access logging | `false` |
-
-### Complete Variables List
-
-```hcl
-variable "bucket_name" {
-  description = "S3 bucket name"
-  type        = string
-}
-
-variable "domain_name" {
-  description = "Domain name"
-  type        = string
-  default     = null
-}
-
-variable "subdomain" {
-  description = "Subdomain"
-  type        = string
-  default     = null
-}
-
-variable "certificate_arn" {
-  description = "ACM certificate ARN"
-  type        = string
-  default     = null
-}
-
-variable "price_class" {
-  description = "CloudFront price class"
-  type        = string
-  default     = "PriceClass_100"
-  
-  validation {
-    condition = contains([
-      "PriceClass_All", 
-      "PriceClass_200", 
-      "PriceClass_100"
-    ], var.price_class)
-    error_message = "Price class must be PriceClass_All, PriceClass_200, or PriceClass_100."
-  }
-}
-
-variable "enable_waf" {
-  description = "Enable AWS WAF"
-  type        = bool
-  default     = false
-}
-
-variable "tags" {
-  description = "Resource tags"
-  type        = map(string)
-  default     = {}
-}
-```
-
-## 🔄 **CI/CD Pipeline**
-
-### GitHub Actions Workflow
-
-The repository includes a complete CI/CD pipeline:
-
-```yaml
-name: Deploy Static Site
-
-on:
-  push:
-    branches: [main]
-    paths: ['website/**']
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-      
-      - name: Deploy to S3
-        run: |
-          aws s3 sync website/ s3://${{ vars.BUCKET_NAME }}/ --delete
-      
-      - name: Invalidate CloudFront
-        run: |
-          aws cloudfront create-invalidation \
-            --distribution-id ${{ vars.DISTRIBUTION_ID }} \
-            --paths "/*"
-```
-
-### Local Development
-
-```bash
-# Install dependencies
-npm install -g live-server
-
-# Start local development server
-live-server website/
-
-# Build and test
-npm run build
-npm run test
-
-# Deploy to staging
-make deploy-staging
-
-# Deploy to production
-make deploy-production
-```
-
-## 🛡️ **Security Features**
-
-### Content Security Policy
-
-```javascript
-// Automatic CSP headers
-Content-Security-Policy: default-src 'self'; 
-                        script-src 'self' 'unsafe-inline' cdn.example.com; 
-                        style-src 'self' 'unsafe-inline'; 
-                        img-src 'self' data: https:;
-```
-
-### Security Headers
-
-- **HSTS**: `Strict-Transport-Security: max-age=31536000`
-- **Frame Options**: `X-Frame-Options: DENY`
-- **Content Type**: `X-Content-Type-Options: nosniff`
-- **XSS Protection**: `X-XSS-Protection: 1; mode=block`
-
-### Access Control
-
-- **Origin Access Control**: S3 bucket is private, accessible only via CloudFront
-- **HTTPS Redirect**: All HTTP traffic automatically redirected to HTTPS
-- **Geographic Restrictions**: Optional geo-blocking capabilities
-
-## 📈 **Monitoring & Alerting**
-
-### CloudWatch Metrics
-
-- **Request Count**: Number of requests to CloudFront
-- **Bytes Downloaded**: Amount of data transferred
-- **Error Rate**: 4xx and 5xx error rates
-- **Cache Hit Ratio**: Percentage of requests served from cache
-
-### Custom Alarms
-
-```hcl
-resource "aws_cloudwatch_metric_alarm" "high_error_rate" {
-  alarm_name          = "high-error-rate"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "4xxErrorRate"
-  namespace           = "AWS/CloudFront"
-  period              = "300"
-  statistic           = "Average"
-  threshold           = "5"
-  alarm_description   = "This metric monitors cloudfront error rate"
-}
-```
-
-## 🧪 **Testing**
-
-### Infrastructure Testing
-
-```bash
-# Terraform validation
-terraform validate
-
-# Security scanning
-tfsec .
-
-# Cost estimation
-terraform plan -out=plan.out
-terraform show -json plan.out | jq
-
-# Integration testing
-go test -v ./tests/
-```
-
-### Website Testing
-
-```bash
-# Performance testing
-lighthouse https://your-site.com --view
-
-# Security testing
-nmap -p 80,443 your-site.com
-
-# SSL testing
-ssllabs-scan --quiet your-site.com
-```
-
-## 🤝 **Contributing**
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 **License**
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-> **"This infrastructure demonstrates how static websites can be deployed at global scale with enterprise-grade performance, security, and cost optimization. Perfect for marketing sites, documentation, SPAs, and any static content delivery."**
+MIT - see [LICENSE](LICENSE).
