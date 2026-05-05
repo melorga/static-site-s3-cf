@@ -1,14 +1,11 @@
 terraform {
-  required_version = ">= 1.0"
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
+  # TODO: replace placeholders with your real backend configuration before running CI.
+  backend "s3" {
+    bucket  = "REPLACE-ME-tfstate-bucket" # TODO: replace
+    key     = "static-site-s3-cf/examples/basic/terraform.tfstate"
+    region  = "us-east-1" # TODO: replace
+    encrypt = true
+    # dynamodb_table = "REPLACE-ME-tf-locks" # TODO: replace if you use DynamoDB locking
   }
 }
 
@@ -16,25 +13,32 @@ provider "aws" {
   region = var.aws_region
 }
 
+# CloudFront ACM certificates must live in us-east-1 regardless of the caller region.
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
 module "static_site" {
   source = "../../modules/s3-cloudfront"
+
+  providers = {
+    aws            = aws
+    aws.us_east_1  = aws.us_east_1
+  }
 
   site_name   = var.site_name
   environment = var.environment
 
   # Optional: Custom domain configuration
-  # custom_domain   = var.custom_domain
-  # hosted_zone_id  = var.hosted_zone_id
+  # custom_domain  = var.custom_domain
+  # hosted_zone_id = var.hosted_zone_id
 
-  # CloudFront configuration
-  price_class               = var.price_class
-  viewer_protocol_policy   = "redirect-to-https"
-  
-  # Caching configuration
-  default_ttl = 3600
-  max_ttl     = 86400
+  price_class            = var.price_class
+  viewer_protocol_policy = "redirect-to-https"
 
-  # Custom error responses
+  enable_logging = var.enable_logging
+
   custom_error_responses = [
     {
       error_code         = 404
