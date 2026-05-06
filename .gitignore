@@ -4,12 +4,12 @@
 *.tfvars
 *.tfplan
 .terraform/
-.terraform.lock.hcl
 crash.log
 override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+# NOTE: .terraform.lock.hcl is intentionally tracked for reproducible CI runs.
 
 # Terragrunt
 .terragrunt-cache/

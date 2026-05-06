@@ -22,6 +22,12 @@ variable "price_class" {
   default     = "PriceClass_100"
 }
 
+variable "enable_logging" {
+  description = "Enable S3 server access logging via a dedicated logs bucket"
+  type        = bool
+  default     = false
+}
+
 # Uncomment these if you want to use a custom domain
 # variable "custom_domain" {
 #   description = "Custom domain name"

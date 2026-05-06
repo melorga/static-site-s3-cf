@@ -2,106 +2,109 @@ name: Deploy Static Site Infrastructure
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+  security-events: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
-  TF_VERSION: '1.8.5'
+  TF_VERSION: '1.15.1'
   AWS_REGION: 'us-east-1'
 
 jobs:
   terraform-validate:
     name: Terraform Validate
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: ${{ env.TF_VERSION }}
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
 
-    - name: Terraform Format Check
-      run: |
-        terraform fmt -check -recursive .
-        if [ $? -ne 0 ]; then
-          echo "Some files need formatting. Run 'terraform fmt -recursive .' to fix."
-          exit 1
-        fi
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive .
 
-    - name: Terraform Init (Module)
-      run: terraform init
-      working-directory: ./modules/s3-cloudfront
+      - name: Terraform Init (Module)
+        run: terraform init -backend=false
+        working-directory: ./modules/s3-cloudfront
 
-    - name: Terraform Validate (Module)
-      run: terraform validate
-      working-directory: ./modules/s3-cloudfront
+      - name: Terraform Validate (Module)
+        run: terraform validate
+        working-directory: ./modules/s3-cloudfront
 
-    - name: Terraform Init (Example)
-      run: terraform init
-      working-directory: ./examples/basic
+      - name: Terraform Init (Example)
+        run: terraform init -backend=false
+        working-directory: ./examples/basic
 
-    - name: Terraform Validate (Example)
-      run: terraform validate
-      working-directory: ./examples/basic
+      - name: Terraform Validate (Example)
+        run: terraform validate
+        working-directory: ./examples/basic
 
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
     needs: terraform-validate
-    
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
 
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      with:
-        scan-type: 'fs'
-        scan-ref: '.'
-        format: 'sarif'
-        output: 'trivy-results.sarif'
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
 
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: 'trivy-results.sarif'
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
 
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
     needs: [terraform-validate, security-scan]
     if: github.event_name == 'pull_request'
-    
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: ${{ env.TF_VERSION }}
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
-    - name: Terraform Init
-      run: terraform init
-      working-directory: ./examples/basic
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./examples/basic
 
-    - name: Terraform Plan
-      run: terraform plan -no-color
-      working-directory: ./examples/basic
-      continue-on-error: true
+      - name: Terraform Plan
+        run: terraform plan -no-color
+        working-directory: ./examples/basic
 
   terraform-apply:
     name: Terraform Apply
@@ -109,57 +112,72 @@ jobs:
     needs: [terraform-validate, security-scan]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: production
-    
+
+    outputs:
+      website_url: ${{ steps.tf_outputs.outputs.website_url }}
+      bucket_name: ${{ steps.tf_outputs.outputs.bucket_name }}
+      distribution_id: ${{ steps.tf_outputs.outputs.distribution_id }}
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: ${{ env.TF_VERSION }}
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
-    - name: Terraform Init
-      run: terraform init
-      working-directory: ./examples/basic
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./examples/basic
 
-    - name: Terraform Apply
-      run: terraform apply -auto-approve
-      working-directory: ./examples/basic
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        working-directory: ./examples/basic
 
-    - name: Get Website URL
-      run: |
-        WEBSITE_URL=$(terraform output -raw website_url)
-        echo "Website deployed at: $WEBSITE_URL"
-        echo "WEBSITE_URL=$WEBSITE_URL" >> $GITHUB_ENV
-      working-directory: ./examples/basic
+      - name: Capture Terraform outputs
+        id: tf_outputs
+        working-directory: ./examples/basic
+        run: |
+          {
+            echo "website_url=$(terraform output -raw website_url)"
+            echo "bucket_name=$(terraform output -raw s3_bucket_name)"
+            echo "distribution_id=$(terraform output -raw cloudfront_distribution_id)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Sync website to S3
+        run: |
+          aws s3 sync examples/basic/website "s3://${{ steps.tf_outputs.outputs.bucket_name }}" --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ steps.tf_outputs.outputs.distribution_id }}" \
+            --paths '/*'
 
   lighthouse-audit:
     name: Lighthouse Performance Audit
     runs-on: ubuntu-latest
     needs: terraform-apply
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
 
-    - name: Wait for site to be available
-      run: |
-        echo "Waiting for site to be available..."
-        sleep 60
+      - name: Wait for CloudFront invalidation to settle
+        run: sleep 60
 
-    - name: Lighthouse CI
-      uses: treosh/lighthouse-ci-action@v10
-      with:
-        urls: |
-          ${{ env.WEBSITE_URL }}
-        uploadArtifacts: true
-        temporaryPublicStorage: true
+      - name: Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          urls: |
+            ${{ needs.terraform-apply.outputs.website_url }}
+          uploadArtifacts: true
+          temporaryPublicStorage: true
