@@ -38,14 +38,11 @@ jobs:
       - name: Terraform Format Check
         run: terraform fmt -check -recursive .
 
-      - name: Terraform Init (Module)
-        run: terraform init -backend=false
-        working-directory: ./modules/s3-cloudfront
-
-      - name: Terraform Validate (Module)
-        run: terraform validate
-        working-directory: ./modules/s3-cloudfront
-
+      # The module declares `configuration_aliases = [aws.us_east_1]`, which
+      # means it cannot be `terraform validate`-ed standalone — the aliased
+      # provider must be passed in by a caller. We validate via the example,
+      # which configures both the default and us_east_1 providers and passes
+      # them into the module. This exercises the module's full surface.
       - name: Terraform Init (Example)
         run: terraform init -backend=false
         working-directory: ./examples/basic
