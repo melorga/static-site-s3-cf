@@ -1,28 +1,40 @@
 version: 2
 updates:
-  - package-ecosystem: github-actions
+  - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 2
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
     labels:
-      - dependencies
-      - github-actions
+      - "dependencies"
+      - "github-actions"
 
-  - package-ecosystem: terraform
+  - package-ecosystem: "terraform"
     directory: "/modules/s3-cloudfront"
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 2
+    groups:
+      terraform-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
     labels:
-      - dependencies
-      - terraform
+      - "dependencies"
+      - "terraform"
 
-  - package-ecosystem: terraform
+  - package-ecosystem: "terraform"
     directory: "/examples/basic"
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 2
+    groups:
+      terraform-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
     labels:
-      - dependencies
-      - terraform
+      - "dependencies"
+      - "terraform"
