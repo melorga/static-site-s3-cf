@@ -38,14 +38,11 @@ jobs:
       - name: Terraform Format Check
         run: terraform fmt -check -recursive .
 
-      - name: Terraform Init (Module)
-        run: terraform init -backend=false
-        working-directory: ./modules/s3-cloudfront
-
-      - name: Terraform Validate (Module)
-        run: terraform validate
-        working-directory: ./modules/s3-cloudfront
-
+      # The module declares `configuration_aliases = [aws.us_east_1]`, which
+      # means it cannot be `terraform validate`-ed standalone — the aliased
+      # provider must be passed in by a caller. We validate via the example,
+      # which configures both the default and us_east_1 providers and passes
+      # them into the module. This exercises the module's full surface.
       - name: Terraform Init (Example)
         run: terraform init -backend=false
         working-directory: ./examples/basic
@@ -81,7 +78,10 @@ jobs:
     name: Terraform Plan
     runs-on: ubuntu-latest
     needs: [terraform-validate, security-scan]
-    if: github.event_name == 'pull_request'
+    # Skip when no AWS role is configured. Plan needs real backend + provider
+    # access. Set the variable under Settings -> Secrets and variables ->
+    # Actions -> Variables -> AWS_OIDC_ROLE_ARN to enable.
+    if: ${{ github.event_name == 'pull_request' && vars.AWS_OIDC_ROLE_ARN != '' }}
 
     steps:
       - name: Checkout
@@ -95,7 +95,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
@@ -110,7 +110,7 @@ jobs:
     name: Terraform Apply
     runs-on: ubuntu-latest
     needs: [terraform-validate, security-scan]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.AWS_OIDC_ROLE_ARN != '' }}
     environment: production
 
     outputs:
@@ -130,7 +130,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
@@ -165,7 +165,7 @@ jobs:
     name: Lighthouse Performance Audit
     runs-on: ubuntu-latest
     needs: terraform-apply
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.AWS_OIDC_ROLE_ARN != '' }}
 
     steps:
       - name: Checkout

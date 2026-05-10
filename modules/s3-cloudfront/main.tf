@@ -208,7 +208,7 @@ resource "aws_route53_record" "cert_validation" {
   for_each = {
     for dvo in flatten([
       local.domain_name != null ? aws_acm_certificate.website[0].domain_validation_options : []
-    ]) : dvo.domain_name => {
+      ]) : dvo.domain_name => {
       name   = dvo.resource_record_name
       record = dvo.resource_record_value
       type   = dvo.resource_record_type
