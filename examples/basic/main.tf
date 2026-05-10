@@ -23,8 +23,8 @@ module "static_site" {
   source = "../../modules/s3-cloudfront"
 
   providers = {
-    aws            = aws
-    aws.us_east_1  = aws.us_east_1
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
   }
 
   site_name   = var.site_name
